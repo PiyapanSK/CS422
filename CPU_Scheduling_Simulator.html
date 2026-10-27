@@ -1,0 +1,752 @@
+<!doctype html>
+<!-- คู่มือโค้ด: HTML=โครงสร้าง, CSS=รูปแบบ, script แรก=คำนวณ, script ที่สอง=หน้าจอ
+ค้น F01–F28 ในซอร์สโค้ดเพื่ออ่านคำอธิบายฟังก์ชันและแนวคำตอบสำหรับพรีเซนต์
+ข้อจำกัดสำคัญ: ทุกโปรเซส AT=0 ไม่มี I/O และไม่มี context-switch overhead -->
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f7fb">
+  <title>โปรแกรมจำลองการจัดสรร CPU · CS422</title>
+  <style>
+/* หน้าหลักมีสองส่วน: กรอกข้อมูลและดูผล ไม่มีเมนูย่อยก่อนคำนวณ */
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Thonburi", "Leelawadee UI", Tahoma, sans-serif;
+  color: #25334b;
+  background: #f4f7fb;
+  font-synthesis: none;
+  --blue: #2457c5;
+  --muted: #5a687e;
+  --line: #dce3ed;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 1250px; padding: 30px 28px; margin: auto; }
+h1, h2, h3, h4, p { margin: 0; }
+h1 { font-size: clamp(26px, 3.5vw, 34px); line-height: 1.5; margin: 6px 0; }
+h2 { font-size: 21px; }
+h3 { font-size: 18px; }
+h4 { font-size: 14px; }
+p { line-height: 1.8; }
+button, input { font: inherit; }
+button, summary { cursor: pointer; }
+button:disabled { opacity: .4; cursor: not-allowed; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 3px solid #7eabff; outline-offset: 4px; }
+.page-header { display: flex; align-items: center; justify-content: space-between; gap: 22px; margin-bottom: 28px; }
+.page-header > div > p:last-child { color: var(--muted); font-size: 15px; }
+.course-label { color: var(--blue); font-size: 12px; font-weight: 650; }
+.model-chip { font-size: 12px; color: var(--muted); background: #eaf0f7; padding: 8px 12px; border-radius: 20px; white-space: nowrap; }
+.workspace { display: grid; grid-template-columns: 315px minmax(0, 1fr); gap: 26px; align-items: start; }
+.panel { border: 1px solid var(--line); border-radius: 16px; background: #fff; }
+.input-panel { padding: 23px; }
+.section-heading { display: flex; align-items: center; gap: 10px; }
+.step { display: grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; border-radius: 50%; background: #e9f0ff; color: var(--blue); font-size: 16px; font-weight: 700; }
+.input-panel .section-heading { margin-bottom: 25px; }
+label { display: block; font-size: 15px; font-weight: 600; }
+label span { color: var(--muted); font-weight: 400; font-size: 12px; }
+input { min-width: 0; width: 100%; min-height: 48px; border: 1px solid #b9c6d8; border-radius: 9px; background: #fff; color: #25334b; padding: 10px 12px; font-size: 19px; font-variant-numeric: tabular-nums; }
+input[aria-invalid="true"] { border-color: #b72e39; background: #fff5f5; }
+.hint { color: var(--muted); font-size: 12px; line-height: 1.8; }
+.count-label, .burst-heading { display: flex; align-items: center; justify-content: space-between; gap: 7px; }
+.stepper { display: grid; grid-template-columns: 50px minmax(0, 1fr) 50px; gap: 8px; margin-top: 10px; }
+.stepper button { min-height: 48px; border: 1px solid #ccd7e7; border-radius: 9px; background: #f6f9fe; color: var(--blue); font-size: 24px; }
+.stepper button:hover:not(:disabled) { background: #eaf1ff; }
+.stepper input { text-align: center; appearance: textfield; }
+.stepper input::-webkit-inner-spin-button, .stepper input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.burst-heading { margin: 23px 0 12px; font-size: 14px; font-weight: 600; }
+.burst-heading .hint { font-size: 11px; font-weight: 400; }
+.burst-list { display: grid; gap: 10px; padding: 4px; margin: -4px; max-height: 282px; overflow-y: auto; }
+.burst-row { display: grid; grid-template-columns: 1fr 100px auto; align-items: center; gap: 10px; }
+.burst-row label { display: flex; align-items: center; gap: 8px; }
+.process-dot { display: inline-block; width: 9px; height: 9px; flex-shrink: 0; border-radius: 50%; background: var(--process-color); }
+.burst-row input { min-height: 44px; padding: 8px 10px; }
+.burst-row > span { color: var(--muted); font-size: 12px; }
+#input-note { margin-top: 11px; }
+.quantum-setting { display: grid; grid-template-columns: 1fr 90px; align-items: center; gap: 12px; border-top: 1px solid var(--line); padding-top: 19px; margin-top: 20px; }
+.quantum-setting .hint { font-size: 11px; margin-top: 5px; }
+.quantum-setting label { font-size: 14px; }
+.quantum-setting input { text-align: center; padding-left: 5px; padding-right: 5px; }
+.button { min-height: 46px; border-radius: 9px; border: 1px solid transparent; font-size: 14px; font-weight: 600; padding: 10px 12px; }
+.primary { margin-top: 22px; width: 100%; min-height: 54px; display: flex; align-items: center; justify-content: space-between; background: var(--blue); color: #fff; font-size: 19px; padding: 12px 18px; }
+.primary:hover { background: #19459e; }
+.primary span { font-size: 24px; }
+.quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.secondary { border-color: #ccd7e7; background: #fff; color: #375275; font-size: 12px; }
+.secondary:hover { background: #f1f5fc; }
+.input-footer { text-align: center; color: var(--muted); font-size: 10px; margin-top: 13px; }
+.error { padding: 12px; margin-top: 15px; border: 1px solid #efc1c7; border-radius: 8px; background: #fff1f3; color: #932b37; font-size: 13px; line-height: 1.8; }
+.results-area { scroll-margin-top: 20px; }
+.results-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 4px; }
+.dataset-label { font-size: 11px; color: var(--muted); background: #e9eef6; padding: 6px 10px; border-radius: 20px; }
+.result-status { font-size: 13px; color: var(--muted); margin: 11px 0 20px; }
+.comparison-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.comparison-heading h3 { font-size: 15px; }
+.comparison-heading h3 span, .comparison-heading p { font-size: 12px; color: var(--muted); font-weight: 400; }
+.method-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.method-card { display: flex; flex-direction: column; text-align: left; align-items: flex-start; min-width: 0; min-height: 173px; border: 2px solid #dce3ed; border-radius: 12px; background: #fff; color: #25334b; padding: 15px; }
+.method-card:hover { border-color: #9bb3e5; }
+.method-card[aria-pressed="true"] { border-color: var(--blue); background: #edf3ff; }
+.method-top { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: space-between; width: 100%; min-height: 24px; }
+.method-name { font-size: 17px; font-weight: 700; }
+.best-tag { color: #256339; background: #e1f2e5; padding: 3px 6px; font-size: 10px; font-weight: 600; border-radius: 5px; }
+.method-meaning { color: var(--muted); font-size: 12px; margin-top: 5px; }
+.method-average { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; margin: 14px 0 13px; }
+.method-average strong { font-size: 32px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1; letter-spacing: -.7px; }
+.method-average strong.long-number { font-size: 23px; }
+.method-average span { color: var(--muted); font-size: 11px; }
+.method-action { margin-top: auto; color: var(--blue); font-size: 12px; font-weight: 600; }
+.comparison-note { color: #346545; background: #edf6ef; border-radius: 8px; padding: 10px 13px; font-size: 12px; margin: 12px 0 18px; }
+.detail-panel { overflow: hidden; }
+.detail-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 21px 22px 0; }
+.detail-heading h3 { font-size: 19px; }
+.detail-heading p { font-size: 13px; color: var(--muted); margin-top: 5px; }
+.total-time { white-space: nowrap; font-size: 11px; color: var(--muted); padding-top: 6px; }
+.timeline-section { padding: 20px 22px 16px; }
+.timeline-section h4 { margin-bottom: 12px; }
+.timeline-scroll { overflow-x: auto; padding-bottom: 4px; }
+.gantt { display: flex; width: max-content; min-width: 100%; padding-bottom: 26px; padding-right: 12px; }
+.gantt-segment { position: relative; display: flex; align-items: center; justify-content: center; min-width: 48px; height: 41px; border-right: 2px solid #fff; background: var(--process-tint); color: #253a30; font-size: 13px; font-weight: 600; }
+.gantt-time { position: absolute; top: 46px; left: 0; color: var(--muted); font-size: 11px; font-weight: 400; }
+.gantt-end { left: auto; right: 0; transform: translateX(40%); }
+.timeline-note { font-size: 10px; color: var(--muted); margin-top: 5px; }
+.table-scroll { overflow-x: auto; }
+.result-table { width: 100%; min-width: 560px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.result-table th, .result-table td { text-align: right; padding: 14px 15px; border-top: 1px solid #e7ecf3; }
+.result-table th { font-size: 11px; font-weight: 500; white-space: nowrap; background: #f7f9fc; color: #52637a; }
+.result-table th span { display: block; margin-top: 4px; font-size: 10px; color: var(--muted); }
+.result-table td { font-size: 15px; }
+.result-table th:first-child, .result-table td:first-child { text-align: left; padding-left: 22px; }
+.result-table td:first-child { font-weight: 650; }
+.result-table .process-dot { margin-right: 7px; }
+.result-table td:last-child { font-weight: 700; color: #204fa4; background: #f1f6ff; }
+.result-example { margin: 0; border-top: 1px solid var(--line); padding: 15px 22px; background: #f9fbff; font-size: 13px; color: #3a5278; }
+.results-footnote { font-size: 11px; color: var(--muted); margin-top: 12px; }
+.empty-results { padding: 48px 20px; text-align: center; }
+.empty-icon { font-size: 30px; color: var(--blue); display: block; margin-bottom: 15px; }
+.empty-results h3 { font-size: 17px; }
+.empty-results p { margin-top: 8px; font-size: 13px; color: var(--muted); }
+.help-panel { background: #fff; border: 1px solid var(--line); border-radius: 12px; margin-top: 25px; }
+.help-panel > summary { padding: 18px 22px; font-size: 14px; font-weight: 600; }
+.help-content { padding: 0 22px 22px; }
+.glossary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; font-size: 13px; margin: 5px 0 24px; }
+dt { font-weight: 650; }
+dd { margin: 6px 0 0; color: var(--muted); line-height: 1.8; }
+footer { font-size: 11px; color: var(--muted); text-align: center; padding-top: 24px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+@media (max-width: 1050px) {
+  main { padding: 24px 20px; }
+  .workspace { grid-template-columns: 285px minmax(0, 1fr); gap: 20px; }
+  .input-panel { padding: 20px; }
+  .method-card { padding: 12px; }
+  .method-top { align-items: flex-start; flex-direction: column; }
+  .method-average strong { font-size: 28px; }
+  .total-time { display: none; }
+  .model-chip { display: none; }
+}
+@media (max-width: 820px) {
+  .workspace { grid-template-columns: 1fr; }
+  .input-panel { padding: 23px; }
+  .burst-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; max-height: 280px; }
+  .burst-row { grid-template-columns: 1fr; gap: 8px; }
+  .burst-row > span { display: none; }
+  .count-label { max-width: 330px; }
+  .stepper { max-width: 330px; }
+  .quantum-setting { grid-template-columns: 1fr 100px; }
+  .quantum-setting .hint br { display: none; }
+  .results-area { margin-top: 4px; }
+  .method-top { flex-direction: row; align-items: center; }
+  .method-card { min-height: 166px; padding: 16px; }
+  .method-average strong { font-size: 32px; }
+  .glossary { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 520px) {
+  main { padding: 22px 14px; }
+  .page-header { margin-bottom: 22px; }
+  .page-header > div > p:last-child { font-size: 13px; }
+  .input-panel { padding: 19px; }
+  .input-panel .section-heading { margin-bottom: 20px; }
+  .count-label, .stepper { max-width: none; }
+  .method-cards { gap: 8px; }
+  .method-card { padding: 13px 10px; min-height: 181px; }
+  .method-top { flex-direction: column; align-items: flex-start; }
+  .method-name { font-size: 16px; }
+  .best-tag { font-size: 9px; }
+  .method-meaning { font-size: 11px; }
+  .method-average strong { font-size: 26px; }
+  .method-average strong.long-number { font-size: 18px; }
+  .method-average span { font-size: 10px; }
+  .method-action { font-size: 11px; }
+  .comparison-heading h3 { font-size: 14px; }
+  .comparison-heading p, .comparison-heading h3 span { font-size: 11px; }
+  .detail-heading, .timeline-section { padding-left: 16px; padding-right: 16px; }
+  .detail-heading h3 { font-size: 18px; }
+  .result-example { padding: 14px 16px; font-size: 12px; }
+  .glossary { grid-template-columns: 1fr; gap: 18px; }
+  /* เปลี่ยนแต่ละแถวเป็นบัตรบนมือถือ: เห็นครบทุกค่าโดยไม่ต้องเลื่อนตาราง */
+  .result-table { display: block; min-width: 0; }
+  .result-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+  .result-table tbody { display: grid; gap: 12px; padding: 0 16px 16px; }
+  .result-table tr { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .result-table td { display: block; padding: 11px 10px; text-align: left; border-top: 1px solid #e7ecf3; font-size: 18px; }
+  .result-table td:first-child { grid-column: 1 / -1; padding: 11px 12px; border-top: 0; background: #f7f9fc; font-size: 14px; }
+  .result-table td:not(:first-child)::before { content: attr(data-label); display: block; font-size: 10px; font-weight: 400; color: var(--muted); margin-bottom: 7px; }
+  .result-table td:last-child { background: #edf4ff; }
+}
+
+
+</style>
+</head>
+<body>
+  <main>
+    <header class="page-header">
+      <div><p class="course-label">CS422 · CPU Scheduling</p><h1>โปรแกรมจำลองการจัดสรร CPU</h1><p>เปรียบเทียบผลการจัดสรร CPU ด้วยอัลกอริทึม FCFS, SJF และ Round Robin</p></div>
+      <span class="model-chip">ทุกงานเริ่มเข้าระบบที่เวลา 0</span>
+    </header>
+
+    <div class="workspace">
+      <form id="simulation-form" class="input-panel panel" novalidate aria-labelledby="input-title">
+        <div class="section-heading"><span class="step" aria-hidden="true">1</span><h2 id="input-title">กำหนดข้อมูล</h2></div>
+        <div class="count-label"><label for="process-count">จำนวนงาน <span>(โปรเซส)</span></label><span class="hint">1–100 งาน</span></div>
+        <div class="stepper">
+          <button id="decrease-count" type="button" aria-label="ลดจำนวนโปรเซส 1 งาน">−</button>
+          <input id="process-count" type="number" min="1" max="100" step="1" value="3" inputmode="numeric" aria-label="จำนวนโปรเซส">
+          <button id="increase-count" type="button" aria-label="เพิ่มจำนวนโปรเซส 1 งาน">+</button>
+        </div>
+        <div class="burst-heading"><span id="burst-label">ระยะเวลาประมวลผลของแต่ละโปรเซส</span><span class="hint">BT · 1–1,000</span></div>
+        <div id="burst-inputs" class="burst-list" role="group" aria-labelledby="burst-label"></div>
+        <p id="input-note" class="hint" role="status">สามารถปรับเปลี่ยนค่าตัวเลขในช่องข้อมูลได้</p>
+        <div class="quantum-setting">
+          <div><label for="quantum">เวลาต่อรอบของ RR</label><p class="hint" id="quantum-help">ระยะเวลาที่แต่ละโปรเซสได้รับ CPU ต่อรอบ<br>Quantum · 1–1,000,000</p></div>
+          <input id="quantum" type="number" min="1" max="1000000" step="1" value="2" inputmode="numeric" aria-describedby="quantum-help">
+        </div>
+        <div id="form-error" class="error" role="alert" hidden></div>
+        <button id="calculate-button" type="submit" class="button primary">คำนวณผล <span aria-hidden="true">→</span></button>
+        <div class="quick-actions"><button id="randomize" type="button" class="button secondary">สุ่มข้อมูลและคำนวณ</button><button id="load-example" type="button" class="button secondary">โหลดข้อมูลตัวอย่าง</button></div>
+        <p class="input-footer">คำนวณและเปรียบเทียบผลของ FCFS · SJF · RR</p>
+      </form>
+
+      <section class="results-area" id="results-section" aria-labelledby="results-title">
+        <div class="results-heading"><div class="section-heading"><span class="step" aria-hidden="true">2</span><h2 id="results-title" tabindex="-1">ผลการคำนวณ</h2></div><span id="dataset-label" class="dataset-label">ข้อมูลตัวอย่าง</span></div>
+        <p id="result-status" class="result-status" role="status" aria-live="polite"></p>
+        <div id="empty-results" class="panel empty-results" hidden><span class="empty-icon" aria-hidden="true">→</span><h3>เลือก “คำนวณผล” เพื่อแสดงผลล่าสุด</h3><p>เมื่อมีการเปลี่ยนแปลงข้อมูล กรุณาคำนวณผลใหม่</p></div>
+        <div id="results-content" hidden>
+          <div class="comparison-heading"><h3>เวลารอเฉลี่ย <span>(AVG WT)</span></h3><p>ค่าที่ต่ำกว่าแสดงถึงระยะเวลารอเฉลี่ยที่น้อยกว่า</p></div>
+          <div id="method-cards" class="method-cards" role="group" aria-label="เลือกวิธีจัดสรร CPU ที่ต้องการดู"></div>
+          <p id="comparison-note" class="comparison-note"></p>
+          <article class="panel detail-panel" id="method-detail" aria-labelledby="detail-title">
+            <div class="detail-heading"><div><h3 id="detail-title"></h3><p id="detail-description"></p></div><span id="total-time" class="total-time"></span></div>
+            <div class="timeline-section"><h4>ลำดับการประมวลผล (Gantt Chart)</h4><div id="timeline-container"></div></div>
+            <div id="table-container"></div>
+            <p id="result-example" class="result-example"></p>
+          </article>
+          <p class="results-footnote">ตัวเลขทั้งหมดใช้หน่วยเวลาเดียวกัน · เลือกอัลกอริทึมด้านบนเพื่อแสดงรายละเอียด</p>
+        </div>
+      </section>
+    </div>
+
+    <details class="help-panel">
+      <summary>คำอธิบายตัวแปรและเงื่อนไขการจำลอง</summary>
+      <div class="help-content">
+        <dl class="glossary">
+          <div><dt>BT · เวลาประมวลผล</dt><dd>เวลาที่งานนั้นต้องใช้ CPU ทั้งหมด</dd></div>
+          <div><dt>ST · เวลาเริ่มประมวลผลครั้งแรก</dt><dd>เวลาแรกที่งานได้ใช้ CPU</dd></div>
+          <div><dt>CT · เวลาสิ้นสุด</dt><dd>เวลาที่งานทำเสร็จสมบูรณ์</dd></div>
+          <div><dt>TAT · เวลารวม</dt><dd>ตั้งแต่เข้าระบบจนเสร็จ: CT − AT ซึ่งโจทย์นี้ AT = 0 จึงเท่ากับ CT</dd></div>
+          <div><dt>WT · เวลารอ</dt><dd>เวลารวม − เวลาประมวลผล หรือ TAT − BT</dd></div>
+          <div><dt>AVG WT · เวลารอเฉลี่ย</dt><dd>ผลรวมเวลารอของทุกงาน ÷ จำนวนงาน</dd></div>
+        </dl>
+        <p class="hint">SJF ทำแบบ Non-preemptive หาก BT เท่ากัน ใช้ลำดับ P เดิม ส่วน ST ของ RR นับเฉพาะครั้งแรกที่ได้ CPU<br>ใช้ CPU เดียว ทุกงานมี AT = 0 ไม่มี I/O และไม่คิดเวลาเปลี่ยนโปรเซส</p>
+      </div>
+    </details>
+    <noscript><p class="error">โปรแกรมนี้ต้องเปิดใช้งาน JavaScript ในเบราว์เซอร์</p></noscript>
+    <footer>CS422 · จำลองการจัดสรร CPU</footer>
+
+  </main>
+<script>
+/* CPU Scheduling: AT = 0, one CPU, no context-switch overhead. */
+(function (root) {
+  "use strict";
+
+  const LIMITS = Object.freeze({ processes: 100, burst: 1000, quantum: 1000000 });
+
+  /* F01 | positiveInteger | ตรวจสอบจำนวนเต็มบวก
+   * รับ value, label และ max; แปลงค่าว่างเป็นข้อความด้วย ?? แล้ว trim ช่องว่าง ตรวจรูปแบบด้วย /^\d+$/ และตรวจ Number.isSafeInteger เพื่อป้องกันค่าที่เก็บได้ไม่แม่นยำ ต้องมีค่าตั้งแต่ 1 ถึง max หากผิดเงื่อนไขจะ throw Error หากถูกต้องจะ return number
+   * คำถาม: ทำไมใช้ input type=number แล้วยังต้องตรวจ?
+   * คำตอบ: คุณสมบัติ HTML ช่วยการกรอก แต่ยังมีค่าว่าง ทศนิยม หรือค่าที่อยู่นอกช่วงได้ โค้ดจึงตรวจซ้ำก่อนคำนวณ; แบบฟอร์มมี novalidate เพื่อให้ JavaScript แสดงข้อความผิดพลาดเอง
+   */
+  function positiveInteger(value, label, max = Number.MAX_SAFE_INTEGER) {
+    const text = String(value ?? "").trim();
+    const number = Number(text);
+    if (!/^\d+$/.test(text) || !Number.isSafeInteger(number) || number < 1) {
+      throw new Error(`${label} ต้องเป็นจำนวนเต็มบวก`);
+    }
+    if (number > max) throw new Error(`${label} ต้องไม่เกิน ${max.toLocaleString("en-US")}`);
+    return number;
+  }
+
+  /* F02 | makeProcesses | สร้างข้อมูลโปรเซส
+   * รับอาร์เรย์ bursts เช่น [5,3,1] ตรวจจำนวนสมาชิก 1–100 แล้วสร้างออบเจ็กต์ใหม่แต่ละตัว: id=P1, index=0, bt=5, st=null, ct=null ค่า null หมายถึงยังไม่เริ่มหรือยังไม่สิ้นสุด
+   * คำถาม: ทำไมสร้างข้อมูลใหม่ทุกวิธี?
+   * คำตอบ: ป้องกันค่า ST/CT และลำดับจากวิธีหนึ่งปะปนกับอีกวิธี ทำให้เปรียบเทียบด้วย BT ชุดเดียวกันได้
+   */
+  function makeProcesses(bursts) {
+    if (!Array.isArray(bursts) || bursts.length === 0 || bursts.length > LIMITS.processes) {
+      throw new Error(`จำนวนโปรเซสต้องอยู่ระหว่าง 1–${LIMITS.processes}`);
+    }
+    // สร้างข้อมูลใหม่ทุกครั้ง: การเรียง SJF ไม่เปลี่ยนลำดับข้อมูลต้นฉบับ
+    return Array.from(bursts, (bt, index) => ({
+      id: `P${index + 1}`, index,
+      bt: positiveInteger(bt, `BT ของ P${index + 1}`, LIMITS.burst),
+      st: null, ct: null
+    }));
+  }
+
+  /* F03 | finish | สรุปผลและคำนวณค่าเฉลี่ย
+   * รับชื่อวิธี processes timeline และ quantum; map สร้าง rows โดย tat=ct และ wt=ct-bt เพราะทุกโปรเซสมี AT=0 ใช้ reduce รวม WT แล้วหารจำนวนโปรเซส และรวม BT เป็น totalTime
+   * คำถาม: ทำไม TAT เท่ากับ CT และ WT=CT−BT?
+   * คำตอบ: สูตรทั่วไป TAT=CT−AT และ WT=TAT−BT เมื่อ AT=0 จึงลดรูปได้ การคำนวณนี้สมมติว่าไม่มีช่วงรอ I/O
+   */
+  function finish(algorithm, processes, timeline, quantum = null) {
+    const rows = processes.map(({ id, bt, st, ct }) => ({ id, bt, st, ct, tat: ct, wt: ct - bt }));
+    return {
+      algorithm, quantum, rows, timeline,
+      avgWT: rows.reduce((sum, p) => sum + p.wt, 0) / rows.length,
+      totalTime: rows.reduce((sum, p) => sum + p.bt, 0)
+    };
+  }
+
+  /* F04 | nonPreemptive | แกนร่วมของ FCFS และ SJF
+   * makeProcesses สร้างข้อมูล แล้ว [...processes] คัดลอกอาร์เรย์เป็น order ถ้าเป็น SJF จะ sort ด้วย BT จากน้อยไปมาก ถ้าเท่ากันใช้ index จากน้อยไปมาก วนทีละโปรเซส: ST=time, time+=BT, CT=time แล้วบันทึกช่วง start/end ลง timeline
+   * คำถาม: ทำไมตารางยังเป็น P1 P2 P3 แต่ Gantt เปลี่ยนลำดับ?
+   * คำตอบ: order เปลี่ยนเฉพาะลำดับการวิ่ง; processes ยังรักษาลำดับเดิม อาร์เรย์ทั้งสองอ้างถึงออบเจ็กต์โปรเซสชุดเดียวกัน ค่า ST/CT จึงปรับตามกัน ส่วน finish ใช้ processes สร้างตาราง
+   */
+  function nonPreemptive(bursts, algorithm) {
+    const processes = makeProcesses(bursts);
+    const order = [...processes];
+    if (algorithm === "SJF") order.sort((a, b) => a.bt - b.bt || a.index - b.index);
+    let time = 0;
+    const timeline = [];
+    for (const p of order) {
+      p.st = time;
+      time += p.bt;
+      p.ct = time;
+      timeline.push({ id: p.id, start: p.st, end: p.ct });
+    }
+    return finish(algorithm, processes, timeline);
+  }
+
+  /* F05 | fcfs | เรียก FCFS
+   * ส่ง bursts และชื่อ FCFS ไปยัง nonPreemptive จึงไม่เรียง BT และใช้ลำดับการกรอกข้อมูลเป็นลำดับการประมวลผล
+   * คำถาม: ถ้า AT ต่างกันยังใช้ได้หรือไม่?
+   * คำตอบ: รุ่นนี้ยังไม่รองรับ AT ต่างกัน ทุกค่า AT ถูกกำหนดเป็น 0 จึงใช้ลำดับ P เป็นกติกาตัดสินเมื่อมาถึงพร้อมกัน
+   */
+  function fcfs(bursts) { return nonPreemptive(bursts, "FCFS"); }
+  /* F06 | sjf | เรียก SJF
+   * ส่ง bursts และชื่อ SJF ไปยัง nonPreemptive เพื่อเรียง BT ก่อนประมวลผลจนเสร็จทีละโปรเซส
+   * คำถาม: SJF นี้เหมือน SRTF หรือไม่?
+   * คำตอบ: ไม่เหมือน รุ่นนี้เป็น SJF แบบ Non-preemptive ไม่มีการตัดงานที่กำลังทำเพื่อให้งานใหม่แย่ง CPU
+   */
+  function sjf(bursts) { return nonPreemptive(bursts, "SJF"); }
+
+  /* F07 | roundRobin | คำนวณ Round Robin
+   * สร้าง remaining เก็บเวลาที่เหลือ และ queue เก็บ index ของโปรเซส เริ่ม time=0 วนด้วย head ขณะที่ head<queue.length อ่านโปรเซสหัวคิว กำหนด ST เฉพาะเมื่อเป็น null ใช้ duration=Math.min(q,remaining[index]) บันทึก timeline แล้วเพิ่ม time และลด remaining ถ้าเหลือ 0 ให้ CT=time มิฉะนั้น push index ต่อท้ายคิว
+   * คำถาม: ทำไมไม่วนไม่สิ้นสุด และทำไมไม่ใช้ shift()?
+   * คำตอบ: BT และ q เป็นจำนวนเต็มบวก ทุกครั้งลด remaining อย่างน้อย 1 จึงจบได้ ส่วน head อ่านตำแหน่งถัดไปโดยไม่ต้องย้ายสมาชิกแบบ shift แต่ยังเก็บรายการเก่าใน queue จึงใช้หน่วยความจำตามจำนวนช่วงประมวลผล
+   */
+  function roundRobin(bursts, quantum = 2) {
+    const processes = makeProcesses(bursts);
+    const q = positiveInteger(quantum, "Time Quantum", LIMITS.quantum);
+    const remaining = processes.map(p => p.bt);
+    const queue = processes.map((_, index) => index);
+    const timeline = [];
+    let time = 0;
+    // head เดินไปข้างหน้าแทน shift() เพื่อลดการย้ายสมาชิกในคิว
+    for (let head = 0; head < queue.length; head++) {
+      const index = queue[head];
+      const p = processes[index];
+      if (p.st === null) p.st = time; // ST ถูกบันทึกเฉพาะการได้ CPU ครั้งแรก
+      const duration = Math.min(q, remaining[index]);
+      timeline.push({ id: p.id, start: time, end: time + duration });
+      time += duration;
+      remaining[index] -= duration;
+      if (remaining[index] === 0) p.ct = time;
+      else queue.push(index);
+    }
+    return finish("RR", processes, timeline, q);
+  }
+
+  /* F08 | compare | คำนวณครบสามวิธี
+   * รับ bursts กับ quantum เรียก fcfs, sjf และ roundRobin แล้วคืนออบเจ็กต์ {FCFS,SJF,RR}
+   * คำถาม: Quantum มีผลกับ FCFS/SJF หรือไม่?
+   * คำตอบ: ไม่มี compare ส่ง quantum ให้ Round Robin เท่านั้น
+   */
+  function compare(bursts, quantum = 2) {
+    return { FCFS: fcfs(bursts), SJF: sjf(bursts), RR: roundRobin(bursts, quantum) };
+  }
+
+  // API สำหรับเรียกคำนวณแยกจาก DOM: CommonJS ใช้ module.exports; เบราว์เซอร์ใช้ window.Scheduling
+  const api = Object.freeze({ LIMITS, positiveInteger, fcfs, sjf, roundRobin, compare });
+  if (typeof module !== "undefined" && module.exports) module.exports = api;
+  else root.Scheduling = api;
+})(typeof globalThis !== "undefined" ? globalThis : this);
+
+</script>
+<script>
+(function () {
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const { LIMITS, positiveInteger, compare } = window.Scheduling;
+  const METHODS = {
+    FCFS: { meaning: "มาก่อนได้รับบริการก่อน", title: "FCFS · มาก่อนได้รับบริการก่อน", description: "ประมวลผลตามลำดับการมาถึง โดยแต่ละโปรเซสทำงานจนเสร็จสิ้นก่อนเริ่มโปรเซสถัดไป ในกรณีนี้ทุกโปรเซสมี AT = 0 จึงใช้ลำดับที่ป้อนข้อมูล" },
+    SJF: { meaning: "งานที่ใช้เวลาประมวลผลสั้นที่สุดก่อน", title: "SJF · งานที่ใช้เวลาประมวลผลสั้นที่สุดก่อน", description: "เลือกโปรเซสที่มีระยะเวลาประมวลผลสั้นที่สุดก่อน โดยไม่แย่งใช้ CPU หากระยะเวลาเท่ากัน ให้ใช้ลำดับโปรเซสเดิม" },
+    RR: { meaning: "จัดสรรเวลาแบบวนรอบ", title: "Round Robin · จัดสรรเวลาแบบวนรอบ", description: "จัดสรร CPU ให้แต่ละโปรเซสตามช่วงเวลาที่กำหนด (Time Quantum) หากประมวลผลไม่เสร็จ ให้นำโปรเซสกลับไปต่อท้ายคิว" }
+  };
+  const COLORS = ["#557957", "#8271b0", "#b77b31", "#467da1", "#a3637d", "#648849"];
+  const TINTS = ["#deebdc", "#e5ddf4", "#f3e2c6", "#d8e9f4", "#f0dfe7", "#e5eed5"];
+  // สถานะหน้าจอ: drafts=ค่าที่ยังเป็นข้อความ, results=ผลสามวิธี, selected=วิธีที่แสดง, source=ชื่อชุดข้อมูล
+  const state = { drafts: ["5", "3", "1"], results: null, selected: "FCFS", source: "ตัวอย่าง 5, 3, 1" };
+
+  /* F09 | element | สร้างองค์ประกอบ HTML
+   * รับชื่อแท็ก className และข้อความ ใช้ document.createElement แล้วกำหนด className และ textContent ก่อนคืน DOM node
+   * คำถาม: ทำไมใช้ textContent?
+   * คำตอบ: ข้อความถูกแสดงเป็นข้อความธรรมดา ไม่ถูกตีความเป็น HTML ต่างจาก innerHTML
+   */
+  function element(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+  /* F10 | colorFor | เลือกสีโปรเซส
+   * นำเลขหลัง P ลบ 1 แล้วหารเอาเศษด้วยจำนวนสีใน palette ทำให้ P1 เริ่มสีแรก และวนซ้ำเมื่อมีโปรเซสมากกว่าสี
+   * คำถาม: สีแสดงลำดับความสำคัญหรือไม่?
+   * คำตอบ: ไม่ใช่ สีใช้ติดตามโปรเซสเดียวกันในช่องข้อมูล ตาราง และ Gantt เท่านั้น
+   */
+  function colorFor(id, palette = COLORS) { return palette[(Number(id.slice(1)) - 1) % palette.length]; }
+  /* F11 | processDot | สร้างจุดสี
+   * สร้าง span แล้วกำหนด CSS custom property --process-color ตามโปรเซส ใช้ aria-hidden=true เพราะเป็นเพียงส่วนตกแต่ง
+   * คำถาม: สีจุดมาจากไหน?
+   * คำตอบ: มาจาก colorFor และอาร์เรย์ COLORS
+   */
+  function processDot(id) {
+    const dot = element("span", "process-dot");
+    dot.style.setProperty("--process-color", colorFor(id));
+    dot.setAttribute("aria-hidden", "true");
+    return dot;
+  }
+  /* F12 | burstInputs | รวบรวมช่อง BT
+   * ค้น input ภายใน burst-inputs แล้วแปลง NodeList เป็นอาร์เรย์ด้วย spread เพื่อใช้ map และ forEach ได้สะดวก
+   * คำถาม: ทำไมต้องค้นช่องใหม่?
+   * คำตอบ: จำนวนช่องเปลี่ยนได้เมื่อเพิ่มหรือลดโปรเซส
+   */
+  function burstInputs() { return [...$("burst-inputs").querySelectorAll("input")]; }
+  /* F13 | rememberInputs | จำค่าที่กำลังกรอก
+   * วนช่อง BT และเก็บ input.value ลง state.drafts ตาม index ค่ายังเป็นข้อความจนกว่าจะผ่าน readInteger
+   * คำถาม: ค่าที่จำอยู่ถาวรหรือไม่?
+   * คำตอบ: ไม่ถาวร เก็บในหน่วยความจำของหน้าเว็บ ไม่มีฐานข้อมูลหรือ localStorage เมื่อโหลดหน้าใหม่จะกลับตัวอย่าง
+   */
+  function rememberInputs() { burstInputs().forEach((input, index) => { state.drafts[index] = input.value; }); }
+  /* F14 | buildInputs | สร้างช่องกรอกตามจำนวนโปรเซส
+   * สร้าง DocumentFragment แล้ววน count ครั้ง สร้าง label จุดสี input และหน่วย กำหนด min/max/step ใช้ค่าจาก state.drafts หรือข้อความว่าง จากนั้น replaceChildren แทนช่องเดิมทั้งหมด
+   * คำถาม: DocumentFragment ช่วยอะไร?
+   * คำตอบ: รวบรวม node ไว้ก่อนนำเข้าหน้าจอครั้งเดียว ทำให้จัดโครงสร้าง DOM ได้เป็นชุด
+   */
+  function buildInputs(count) {
+    const fragment = document.createDocumentFragment();
+    for (let index = 0; index < count; index++) {
+      const id = `P${index + 1}`;
+      const row = element("div", "burst-row");
+      const label = element("label");
+      label.htmlFor = `burst-${index + 1}`;
+      label.append(processDot(id), document.createTextNode(id));
+      const input = element("input");
+      input.id = label.htmlFor; input.type = "number";
+      input.min = "1"; input.max = String(LIMITS.burst); input.step = "1";
+      input.inputMode = "numeric"; input.placeholder = "เวลา";
+      input.value = state.drafts[index] ?? "";
+      input.setAttribute("aria-label", `เวลาประมวลผลของ ${id} (BT)`);
+      row.append(label, input, element("span", "", "หน่วย")); fragment.append(row);
+    }
+    $("burst-inputs").replaceChildren(fragment);
+  }
+  /* F15 | syncCount | ปรับจำนวนช่องให้ตรงข้อมูล
+   * หากจำนวนช่องเดิมไม่เท่ากับ count จะจำค่าเก่าแล้วสร้างช่องใหม่ จากนั้นอัปเดตสถานะปุ่มเพิ่มและลด
+   * คำถาม: ลดแล้วเพิ่มกลับ ค่าเดิมหายหรือไม่?
+   * คำตอบ: drafts เก็บค่าตาม index ที่เคยกรอกไว้ จึงอาจนำค่าเดิมกลับมาได้ แต่การโหลดตัวอย่างหรือสุ่มข้อมูลจะเปลี่ยน drafts
+   */
+  function syncCount(count) {
+    if (burstInputs().length !== count) { rememberInputs(); buildInputs(count); }
+    updateCountButtons();
+  }
+  /* F16 | updateCountButtons | ควบคุมปุ่มเพิ่มและลด
+   * ตรวจจำนวนโปรเซสที่กรอก ถ้าไม่ถูกต้องจะปิดทั้งสองปุ่ม ถ้าถึง 1 จะปิดปุ่มลด และถ้าถึง 100 จะปิดปุ่มเพิ่ม
+   * คำถาม: disabled คืออะไร?
+   * คำตอบ: สถานะปุ่มที่ไม่สามารถกดใช้งานได้ในขณะนั้น
+   */
+  function updateCountButtons() {
+    const value = $("process-count").value;
+    const count = Number(value);
+    const valid = /^\d+$/.test(value) && Number.isInteger(count) && count >= 1 && count <= LIMITS.processes;
+    $("decrease-count").disabled = !valid || count <= 1;
+    $("increase-count").disabled = !valid || count >= LIMITS.processes;
+  }
+  /* F17 | clearError | ล้างข้อผิดพลาดเดิม
+   * ซ่อนข้อความผิดพลาด ล้างข้อความ และลบ aria-invalid กับ aria-errormessage จากช่องที่เคยผิด
+   * คำถาม: ทำไมต้องล้างก่อนคำนวณ?
+   * คำตอบ: ไม่ให้ข้อความเก่าค้างเมื่อผู้ใช้แก้ไขข้อมูลแล้ว
+   */
+  function clearError() {
+    $("form-error").hidden = true; $("form-error").textContent = "";
+    document.querySelectorAll('[aria-invalid="true"]').forEach(input => {
+      input.removeAttribute("aria-invalid"); input.removeAttribute("aria-errormessage");
+    });
+  }
+  /* F18 | showError | แจ้งข้อผิดพลาด
+   * แสดง message ใน form-error หากระบุ input จะตั้ง aria-invalid และ aria-errormessage แล้ว focus ไปยังช่องนั้น
+   * คำถาม: ผู้ใช้รู้ได้อย่างไรว่าผิดช่องไหน?
+   * คำตอบ: ช่องถูกทำเครื่องหมายผิดพลาดและได้รับโฟกัส พร้อมข้อความอธิบาย
+   */
+  function showError(message, input) {
+    $("form-error").textContent = message; $("form-error").hidden = false;
+    if (input) {
+      input.setAttribute("aria-invalid", "true"); input.setAttribute("aria-errormessage", "form-error");
+      input.focus();
+    }
+  }
+  /* F19 | readInteger | อ่านตัวเลขจากช่องกรอก
+   * ส่ง input.value ให้ positiveInteger ถ้าไม่ผ่านจะเลือกข้อความให้เหมาะกับค่าว่างหรือค่าผิดช่วง เรียก showError แล้ว throw ต่อไปยัง calculate
+   * คำถาม: ทำไมต้อง throw ต่อ?
+   * คำตอบ: เพื่อหยุดการคำนวณและเข้าสู่ catch ของผู้เรียก แทนการใช้ค่าที่ผิด
+   */
+  function readInteger(input, label, max) {
+    try { return positiveInteger(input.value, label, max); }
+    catch (error) {
+      const message = input.value.trim() === "" ? `กรุณาระบุ${label}` : `${label} ต้องเป็นเลขจำนวนเต็มตั้งแต่ 1 ถึง ${max.toLocaleString("en-US")}`;
+      showError(message, input); throw error;
+    }
+  }
+  /* F20 | invalidate | ยกเลิกผลที่ไม่ตรงกับข้อมูลล่าสุด
+   * ตั้ง state.results=null ซ่อน results-content แสดง empty-results และแจ้งให้คำนวณใหม่
+   * คำถาม: แก้เลขแล้วทำไมผลหาย?
+   * คำตอบ: ตั้งใจซ่อนผลเก่าเพื่อป้องกันการอ่านผลที่คำนวณจากข้อมูลคนละชุด
+   */
+  function invalidate(message = "ข้อมูลมีการเปลี่ยนแปลง กรุณาเลือก “คำนวณผล” อีกครั้ง") {
+    state.results = null;
+    $("results-content").hidden = true; $("empty-results").hidden = false;
+    $("result-status").textContent = message; $("dataset-label").textContent = "รอคำนวณ";
+  }
+  /* F21 | scrollToResults | เลื่อนไปผลลัพธ์บนจอเล็ก
+   * ใช้ matchMedia ตรวจความกว้างไม่เกิน 820px จึงเลื่อนไปส่วนผล และตรวจ prefers-reduced-motion เพื่อเลือกเลื่อนทันทีหรือแบบ smooth
+   * คำถาม: ทำไมจอใหญ่ไม่เลื่อน?
+   * คำตอบ: รูปแบบจอใหญ่แสดงช่องกรอกและผลข้างกันอยู่แล้ว
+   */
+  function scrollToResults() {
+    // จอใหญ่เห็นแบบฟอร์มกับผลคู่กันอยู่แล้ว จอเล็กจึงค่อยเลื่อนไปยังผล
+    if (window.matchMedia("(max-width: 820px)").matches) {
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      $("results-section").scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+    }
+  }
+
+  /* F22 | renderMethodCards | แสดงการ์ดเปรียบเทียบ
+   * หา minimum ของ avgWT แล้วหา winners ทุกวิธีที่เท่ากับค่านั้น สร้างปุ่มพร้อมชื่อ ค่าเฉลี่ยสองตำแหน่ง และป้ายต่ำสุด การกดปุ่มเปลี่ยน state.selected และเรียก renderDetail โดยใช้ผลเดิม
+   * คำถาม: ป้ายต่ำสุดหมายถึงดีที่สุดทุกด้านหรือไม่?
+   * คำตอบ: ไม่ใช่ เปรียบเทียบเฉพาะ Average Waiting Time ของข้อมูลชุดนี้ ไม่ได้ตัดสินความยุติธรรมหรือ Response Time; เปรียบเทียบค่าจริงก่อน toFixed(2) ซึ่งใช้เพื่อแสดงผลเท่านั้น
+   */
+  function renderMethodCards() {
+    const minimum = Math.min(...Object.values(state.results).map(result => result.avgWT));
+    const winners = Object.keys(state.results).filter(key => state.results[key].avgWT === minimum);
+    const fragment = document.createDocumentFragment();
+    for (const [key, result] of Object.entries(state.results)) {
+      const card = element("button", "method-card");
+      card.type = "button";
+      card.setAttribute("aria-pressed", String(key === state.selected));
+      card.setAttribute("aria-controls", "method-detail");
+      card.setAttribute("aria-label", `${key} ${METHODS[key].meaning} เวลารอเฉลี่ย ${result.avgWT.toFixed(2)} หน่วย เลือกเพื่อแสดงผล`);
+      const top = element("span", "method-top"); top.append(element("span", "method-name", key));
+      if (winners.includes(key)) top.append(element("span", "best-tag", "เวลารอเฉลี่ยต่ำสุด"));
+      const average = element("span", "method-average");
+      const averageText = result.avgWT.toFixed(2);
+      average.append(element("strong", averageText.length > 6 ? "long-number" : "", averageText), element("span", "", "หน่วย"));
+      card.append(top, element("span", "method-meaning", METHODS[key].meaning), average,
+        element("span", "method-action", key === state.selected ? "✓ กำลังแสดง" : "ดูผล →"));
+      card.addEventListener("click", () => {
+        if (!state.results) return;
+        state.selected = key;
+        // เปลี่ยนเฉพาะสถานะของปุ่มเดิม เพื่อรักษา keyboard focus
+        [...$("method-cards").children].forEach((button, index) => {
+          const active = Object.keys(METHODS)[index] === key;
+          button.setAttribute("aria-pressed", String(active));
+          button.querySelector(".method-action").textContent = active ? "✓ กำลังแสดง" : "ดูผล →";
+        });
+        renderDetail();
+        $("result-status").textContent = `กำลังแสดง ${key} · ${result.rows.length} งาน · ใช้ข้อมูลชุดเดียวกันทั้ง 3 วิธี`;
+      });
+      fragment.append(card);
+    }
+    $("method-cards").replaceChildren(fragment);
+    $("comparison-note").textContent = `${winners.join(" และ ")} มีเวลารอเฉลี่ยต่ำสุดสำหรับข้อมูลชุดนี้${winners.length > 1 ? " (เท่ากัน)" : ""}: ${minimum.toFixed(2)} หน่วย · RR ใช้รอบละ ${state.results.RR.quantum} หน่วย`;
+  }
+  /* F23 | renderTable | สร้างตารางผล
+   * สร้างหัวคอลัมน์ Process AT BT ST CT TAT WT แล้ววน result.rows โดยคอลัมน์ AT ใส่ 0 โดยตรง ค่าอื่นมาจากผลคำนวณ data-label ใช้แสดงชื่อคอลัมน์เมื่อปรับตารางเป็นการ์ดบนมือถือ
+   * คำถาม: ตารางมี AT แล้วแปลว่ารับ AT ได้หรือไม่?
+   * คำตอบ: ยังรับไม่ได้ คอลัมน์ AT เป็นค่าคงที่ 0 ใน [0,p.bt,p.st,p.ct,p.tat,p.wt] ไม่ใช่ค่าจากช่องกรอก
+   */
+  function renderTable(result) {
+    const scroll = element("div", "table-scroll");
+    scroll.tabIndex = 0; scroll.setAttribute("role", "region");
+    scroll.setAttribute("aria-label", `ตารางผล ${result.algorithm}`);
+    const table = element("table", "result-table"); table.setAttribute("role", "table");
+    table.append(element("caption", "sr-only", `ผล ${result.algorithm} ทุกงานเข้าระบบ ณ เวลา 0`));
+    const columns = [["งาน", "Process"], ["เวลามาถึง", "AT"], ["เวลาประมวลผล", "BT"], ["เวลาเริ่มประมวลผลครั้งแรก", "ST"], ["เวลาสิ้นสุด", "CT"], ["เวลารวม", "TAT"], ["เวลารอ", "WT"]];
+    const head = element("thead"); head.setAttribute("role", "rowgroup");
+    const header = element("tr"); header.setAttribute("role", "row");
+    columns.forEach(([label, abbreviation]) => {
+      const cell = element("th", "", label); cell.scope = "col";
+      cell.setAttribute("role", "columnheader");
+      cell.append(element("span", "", abbreviation)); header.append(cell);
+    });
+    head.append(header);
+    const body = element("tbody"); body.setAttribute("role", "rowgroup");
+    result.rows.forEach(p => {
+      const row = element("tr"); row.setAttribute("role", "row");
+      const name = element("td"); name.setAttribute("role", "cell");
+      name.append(processDot(p.id), document.createTextNode(p.id)); row.append(name);
+      [0, p.bt, p.st, p.ct, p.tat, p.wt].forEach((value, index) => {
+        const cell = element("td", "", value); cell.setAttribute("role", "cell");
+        cell.setAttribute("data-label", `${columns[index + 1][0]} (${columns[index + 1][1]})`);
+        row.append(cell);
+      });
+      body.append(row);
+    });
+    table.append(head, body); scroll.append(table);
+    $("table-container").replaceChildren(scroll);
+  }
+  /* F24 | renderTimeline | วาด Gantt Chart
+   * ใช้ timeline.slice(0,200) จำกัดเฉพาะการวาด 200 ช่วงแรก กำหนดสีตาม id ความกว้างสัมพันธ์กับระยะเวลาของช่วง แต่ตั้งขั้นต่ำ 48px เพื่ออ่านชื่อได้ ใส่ start ทุกช่วง และ end ที่ปลายช่วงสุดท้าย
+   * คำถาม: แท่งกว้างเท่ากันแปลว่าเวลาเท่ากันหรือไม่?
+   * คำตอบ: ไม่เสมอ เพราะมีความกว้างขั้นต่ำ ให้ยึดตัวเลข start/end เป็นหลัก การตัดเหลือ 200 ช่วงไม่เปลี่ยนการคำนวณ CT/WT หรือค่าเฉลี่ย
+   */
+  function renderTimeline(result) {
+    const scroll = element("div", "timeline-scroll");
+    scroll.tabIndex = 0; scroll.setAttribute("role", "region");
+    scroll.setAttribute("aria-label", `ลำดับการทำงาน ${result.algorithm} เลื่อนซ้ายขวาได้`);
+    const gantt = element("div", "gantt");
+    const shown = result.timeline.slice(0, 200);
+    const duration = shown[shown.length - 1].end;
+    shown.forEach((slice, index) => {
+      const segment = element("div", "gantt-segment", slice.id);
+      segment.style.setProperty("--process-tint", colorFor(slice.id, TINTS));
+      segment.style.width = `${Math.max(48, (slice.end - slice.start) / duration * 500)}px`;
+      segment.style.flexGrow = String(slice.end - slice.start);
+      segment.title = `${slice.id}: เริ่ม ${slice.start} จบ ${slice.end}`;
+      segment.setAttribute("aria-label", `${slice.id} เวลา ${slice.start} ถึง ${slice.end}`);
+      segment.append(element("span", "gantt-time", slice.start));
+      if (index === shown.length - 1) segment.append(element("span", "gantt-time gantt-end", slice.end));
+      gantt.append(segment);
+    });
+    scroll.append(gantt);
+    const note = result.timeline.length > 200
+      ? `แสดง 200 ช่วงแรกจาก ${result.timeline.length.toLocaleString("en-US")} ช่วง ตารางและค่าเฉลี่ยคำนวณครบทุกช่วง`
+      : "อ่านจากซ้ายไปขวา · ตัวเลขขอบคือเวลาจริง (ช่วงสั้นขยายให้อ่านชื่อได้)";
+    $("timeline-container").replaceChildren(scroll, element("p", "timeline-note", note));
+  }
+  /* F25 | renderDetail | แสดงรายละเอียดวิธีที่เลือก
+   * อ่าน state.results[state.selected] ใส่ชื่อและคำอธิบาย เรียก renderTimeline กับ renderTable แล้วเลือกโปรเซสที่ WT>0 เพื่อแสดงตัวอย่างสูตร หากไม่มีใช้โปรเซสแรก
+   * คำถาม: ทำไมตัวอย่างอธิบายเลือกบางโปรเซส?
+   * คำตอบ: ต้องการแสดงกรณีที่มีเวลารอให้เห็นสูตรชัดเจน ไม่ได้คำนวณเฉพาะโปรเซสที่ยกตัวอย่าง
+   */
+  function renderDetail() {
+    const result = state.results[state.selected];
+    const meta = METHODS[state.selected];
+    $("detail-title").textContent = meta.title;
+    $("detail-description").textContent = meta.description + (state.selected === "RR" ? ` · รอบละ ${result.quantum} หน่วย` : "");
+    $("total-time").textContent = `เวลารวม ${result.totalTime} หน่วย`;
+    renderTimeline(result); renderTable(result);
+    const p = result.rows.find(row => row.wt > 0) || result.rows[0];
+    $("result-example").textContent = `ตัวอย่างการคำนวณ: ${p.id} เสร็จที่ ${p.ct} ใช้เวลาประมวลผล ${p.bt} → รอทั้งหมด ${p.ct} − ${p.bt} = ${p.wt} หน่วย`;
+  }
+  /* F26 | calculate | ประสานการคำนวณทั้งหมด
+   * ล้าง error อ่านจำนวนโปรเซส ปรับช่อง อ่าน BT ทุกช่องและ quantum เรียก compare เก็บผลใน state.results วาดการ์ดและรายละเอียด แสดงผล และย้ายโฟกัสตาม moveFocus หากผิดพลาดจะ invalidate และแสดง error
+   * คำถาม: กดคำนวณแล้วเกิดอะไรตามลำดับ?
+   * คำตอบ: อ่านข้อมูล → ตรวจความถูกต้อง → คำนวณทั้งสามวิธี → เก็บผล → สร้างการ์ด ตาราง และ Gantt
+   */
+  function calculate(moveFocus = true) {
+    clearError();
+    try {
+      const count = readInteger($("process-count"), "จำนวนงาน", LIMITS.processes);
+      syncCount(count);
+      const bursts = burstInputs().map((input, index) => readInteger(input, `เวลาของ P${index + 1}`, LIMITS.burst));
+      const quantum = readInteger($("quantum"), "เวลาต่อรอบของ RR", LIMITS.quantum);
+      state.results = compare(bursts, quantum);
+      renderMethodCards(); renderDetail();
+      $("results-content").hidden = false; $("empty-results").hidden = true;
+      $("dataset-label").textContent = state.source;
+      $("result-status").textContent = `คำนวณครบ ${count} งานแล้ว · เลือกอัลกอริทึมด้านล่างเพื่อแสดงรายละเอียด`;
+      if (moveFocus) { $("results-title").focus({ preventScroll: true }); scrollToResults(); }
+    } catch (error) {
+      invalidate("ไม่สามารถคำนวณได้ กรุณาตรวจสอบช่องข้อมูลที่แสดงข้อผิดพลาด");
+      if ($("form-error").hidden) showError(error.message);
+    }
+  }
+  /* F27 | changeCount | เพิ่มหรือลดโปรเซส
+   * รับ amount เป็น -1 หรือ 1 ตรวจจำนวนเดิม แล้วใช้ Math.max/Math.min จำกัดผลในช่วง 1–100 อัปเดตช่องและเรียก invalidate
+   * คำถาม: ทำไมเพิ่มโปรเซสแล้วไม่คำนวณทันที?
+   * คำตอบ: ช่องใหม่อาจยังว่าง ต้องกรอก BT ให้ครบและกดคำนวณก่อน
+   */
+  function changeCount(amount) {
+    const current = Number($("process-count").value);
+    if (!Number.isInteger(current) || current < 1 || current > LIMITS.processes) return;
+    const count = Math.max(1, Math.min(LIMITS.processes, current + amount));
+    $("process-count").value = String(count);
+    syncCount(count); clearError(); state.source = "ข้อมูลของคุณ"; invalidate();
+    $("input-note").textContent = `จำนวน ${count} โปรเซส กรุณาระบุระยะเวลาประมวลผลให้ครบทุกช่อง`;
+  }
+  /* F28 | loadExample | โหลดตัวอย่างเริ่มต้น
+   * ตั้งจำนวนเป็น 3, quantum=2, drafts=[5,3,1], เลือก FCFS สร้างช่องและเรียก calculate; ตอนท้ายไฟล์เรียก loadExample(false) เพื่อแสดงผลทันทีโดยไม่ย้ายโฟกัส
+   * คำถาม: ตัวอย่างได้ 4.33 มาจากไหน?
+   * คำตอบ: FCFS ของ BT=[5,3,1] มี WT=[0,5,8] ดังนั้น (0+5+8)/3=13/3≈4.33 หน่วย
+   */
+  function loadExample(moveFocus = true) {
+    $("process-count").value = "3"; $("quantum").value = "2";
+    state.drafts = ["5", "3", "1"]; state.source = "ตัวอย่าง 5, 3, 1"; state.selected = "FCFS";
+    buildInputs(3); updateCountButtons();
+    $("input-note").textContent = "กำหนดข้อมูลตัวอย่างเรียบร้อยแล้ว สามารถปรับเปลี่ยนค่าตัวเลขได้ตามต้องการ";
+    calculate(moveFocus);
+  }
+
+  // EVENTS: submit ป้องกัน reload แล้วคำนวณ; input ทำให้ผลเก่าหมดอายุ; click เชื่อมปุ่มกับฟังก์ชัน
+  $("simulation-form").addEventListener("submit", event => { event.preventDefault(); calculate(); });
+  $("simulation-form").addEventListener("input", event => {
+    clearError(); state.source = "ข้อมูลของคุณ"; invalidate();
+    if (event.target.id === "process-count") {
+      updateCountButtons();
+      try {
+        const count = positiveInteger(event.target.value, "จำนวนงาน", LIMITS.processes);
+        syncCount(count); $("input-note").textContent = `จำนวน ${count} โปรเซส กรุณาระบุระยะเวลาประมวลผลให้ครบทุกช่อง`;
+      } catch (_) { $("input-note").textContent = "กรุณาระบุจำนวนโปรเซสตั้งแต่ 1 ถึง 100"; }
+    } else if (event.target.id.startsWith("burst-")) {
+      rememberInputs(); $("input-note").textContent = "ข้อมูลมีการเปลี่ยนแปลง สามารถเลือก “คำนวณผล” เพื่อแสดงผลล่าสุด";
+    }
+  });
+  $("decrease-count").addEventListener("click", () => changeCount(-1));
+  $("increase-count").addEventListener("click", () => changeCount(1));
+  $("randomize").addEventListener("click", () => {
+    clearError();
+    try {
+      const count = readInteger($("process-count"), "จำนวนงาน", LIMITS.processes);
+      state.drafts = Array.from({ length: count }, () => String(Math.floor(Math.random() * 10) + 1));
+      buildInputs(count); updateCountButtons(); state.source = "ข้อมูลสุ่ม";
+      $("input-note").textContent = "สุ่มค่าตัวเลขระหว่าง 1–10 เรียบร้อยแล้ว สามารถปรับเปลี่ยนค่าเพิ่มเติมได้";
+      calculate();
+    } catch (_) { invalidate("กรุณาระบุจำนวนโปรเซสให้ถูกต้องก่อนสุ่มข้อมูล"); }
+  });
+  $("load-example").addEventListener("click", () => loadExample());
+  // แสดงตัวอย่างพร้อมผลทันที เพื่อให้เห็นวิธีอ่านก่อนเริ่มกรอกข้อมูลเอง
+  loadExample(false);
+})();
+
+</script>
+</body>
+</html>
